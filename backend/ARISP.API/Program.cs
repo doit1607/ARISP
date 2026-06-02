@@ -94,6 +94,8 @@ builder.Services.AddScoped<ITTSService, MockTTSService>();
 builder.Services.AddScoped<IAvatarService, MockAvatarService>();
 builder.Services.AddScoped<INotificationService, MockNotificationService>();
 
+builder.Services.AddTransient<IEmailService, EmailService>();
+
 // Application Services
 builder.Services.AddScoped<PlaybookService>();
 builder.Services.AddScoped<ApplicationService>();
@@ -153,7 +155,7 @@ builder.Services.AddAuthentication(options =>
     var googleClientId = builder.Configuration["Authentication:Google:ClientId"] ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
     var googleSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
 
-    // 🛡️ Nếu trống, gán chuỗi Mock để tránh crash pipeline khi chạy Local/Swagger
+    // 🛡�? Nếu trống, gán chuỗi Mock để tránh crash pipeline khi chạy Local/Swagger
     options.ClientId = string.IsNullOrEmpty(googleClientId) ? "MOCK_GOOGLE_CLIENT_ID_FOR_LOCAL" : googleClientId;
     options.ClientSecret = string.IsNullOrEmpty(googleSecret) ? "MOCK_GOOGLE_SECRET_FOR_LOCAL" : googleSecret;
 });
@@ -184,7 +186,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("HrManagement", policy =>
         policy.RequireRole(AppRoles.SuperAdmin, AppRoles.HrAdmin));
 
-    // 3. Chính sách dành cho toàn bộ nhân viên nội bộ có quyền vào hệ thống quản lý chuyên môn
+    // 3. Chính sách dành cho toàn bộ nhân viên nội bộ có quy�?n vào hệ thống quản lý chuyên môn
     options.AddPolicy("InternalStaff", policy =>
         policy.RequireRole(AppRoles.SuperAdmin, AppRoles.HrAdmin, AppRoles.Recruiter));
 
