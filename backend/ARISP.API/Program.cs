@@ -101,6 +101,9 @@ builder.Services.AddScoped<PlaybookService>();
 builder.Services.AddScoped<ApplicationService>();
 builder.Services.AddScoped<InterviewService>();
 
+// Clear DefaultInboundClaimTypeMap to keep original JWT claim names ("role", "sub", "email")
+System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler.DefaultInboundClaimTypeMap.Clear();
+
 // Configure JWT Authentication and external SSO
 var jwtSecret = builder.Configuration["JWT:Secret"] ?? "***REMOVED***";
 
@@ -120,7 +123,8 @@ builder.Services.AddAuthentication(options =>
         ValidIssuer = builder.Configuration["JWT:Issuer"] ?? "ARISP",
         ValidAudience = builder.Configuration["JWT:Audience"] ?? "ARISP_Client",
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-        RoleClaimType = ClaimTypes.Role // Explicitly map role claim
+        RoleClaimType = "role", // Map role claim using standard short name
+        NameClaimType = "sub"  // Map name/ID claim using standard short name
     };
 })
 .AddJwtBearer("Firebase", options =>
@@ -155,7 +159,7 @@ builder.Services.AddAuthentication(options =>
     var googleClientId = builder.Configuration["Authentication:Google:ClientId"] ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_ID");
     var googleSecret = builder.Configuration["Authentication:Google:ClientSecret"] ?? Environment.GetEnvironmentVariable("GOOGLE_CLIENT_SECRET");
 
-    // 🛡�? Nếu trống, gán chuỗi Mock để tránh crash pipeline khi chạy Local/Swagger
+    // 🛡️ Nếu trống, gán chuỗi Mock để tránh crash pipeline khi chạy Local/Swagger
     options.ClientId = string.IsNullOrEmpty(googleClientId) ? "MOCK_GOOGLE_CLIENT_ID_FOR_LOCAL" : googleClientId;
     options.ClientSecret = string.IsNullOrEmpty(googleSecret) ? "MOCK_GOOGLE_SECRET_FOR_LOCAL" : googleSecret;
 });
@@ -186,7 +190,7 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("HrManagement", policy =>
         policy.RequireRole(AppRoles.SuperAdmin, AppRoles.HrAdmin));
 
-    // 3. Chính sách dành cho toàn bộ nhân viên nội bộ có quy�?n vào hệ thống quản lý chuyên môn
+    // 3. Chính sách dành cho toàn bộ nhân viên nội bộ có quyền vào hệ thống quản lý chuyên môn
     options.AddPolicy("InternalStaff", policy =>
         policy.RequireRole(AppRoles.SuperAdmin, AppRoles.HrAdmin, AppRoles.Recruiter));
 
