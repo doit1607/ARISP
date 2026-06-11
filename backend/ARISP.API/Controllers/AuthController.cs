@@ -43,8 +43,8 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// CỔNG ĐĂNG NHẬP 1: DÀNH RIÊNG CHO ỨNG VIÊN (Candidate - Tại /jobs/login)
-        /// Xác thực truyền thống qua form điền Email + Mật khẩu cá nhân
+        /// CỔNG �?ĂNG NHẬP 1: DÀNH RIÊNG CHO ỨNG VIÊN (Candidate - Tại /jobs/login)
+        /// Xác thực truy�?n thống qua form đi�?n Email + Mật khẩu cá nhân
         /// </summary>
         [HttpPost("candidate/login")]
         [AllowAnonymous]
@@ -61,7 +61,7 @@ namespace ARISP.API.Controllers
             if (!isValidCandidatePass)
                 return Unauthorized(new { message = "Invalid email or password." });
 
-            // Cập nhật thời gian đăng nhập cuối
+            // Cập nhật th�?i gian đăng nhập cuối
             candidate.LastLoginAt = DateTimeOffset.UtcNow;
 
             var accessToken = GenerateJwtTokenForCandidate(candidate);
@@ -77,7 +77,7 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// CỔNG ĐĂNG NHẬP FIREBASE: Backend xác thực Firebase ID token rồi cấp JWT nội bộ ARISP.
+        /// CỔNG �?ĂNG NHẬP FIREBASE: Backend xác thực Firebase ID token rồi cấp JWT nội bộ ARISP.
         /// </summary>
         [HttpPost("firebase/candidate/login")]
         [Authorize(AuthenticationSchemes = "Firebase")]
@@ -140,11 +140,58 @@ namespace ARISP.API.Controllers
         }
 
         // ============================================================
+        // HR / INTERNAL STAFF LOGIN (Email + Password)
+        // ============================================================
+
+        /// <summary>
+        /// CỔNG �?ĂNG NHẬP NỘI BỘ: Dành cho Super Admin, HR Admin, Recruiter
+        /// Xác thực truy�?n thống qua form đi�?n Email + Mật khẩu (dùng cho dev/test hoặc fallback khi OAuth2 không khả dụng)
+        /// </summary>
+        [HttpPost("staff/login")]
+        [AllowAnonymous]
+        public async Task<IActionResult> StaffLogin([FromBody] LoginRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+                return BadRequest(new { message = "Email và mật khẩu là bắt buộc." });
+
+            var user = await _dbContext.Users
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(u => u.Email == request.Email);
+
+            if (user == null)
+                return Unauthorized(new { message = "Sai email hoặc mật khẩu." });
+
+            if (!user.IsActive)
+                return Unauthorized(new { message = "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên." });
+
+            if (string.IsNullOrEmpty(user.PasswordHash) || user.PasswordHash == "FIREBASE_AUTH")
+                return BadRequest(new { message = "Tài khoản này chỉ hỗ trợ đăng nhập qua SSO (Google/Microsoft)." });
+
+            bool isValidPass = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
+            if (!isValidPass)
+                return Unauthorized(new { message = "Sai email hoặc mật khẩu." });
+
+            user.LastLoginAt = DateTimeOffset.UtcNow;
+            await _dbContext.SaveChangesAsync();
+
+            var accessToken = GenerateJwtTokenForUser(user);
+            var refreshToken = await GenerateAndStoreRefreshTokenForUserAsync(user.Id);
+
+            return Ok(new AuthResponse
+            {
+                AccessToken = accessToken,
+                RefreshToken = refreshToken,
+                FullName = user.FullName ?? "Staff",
+                Role = user.Role
+            });
+        }
+
+        // ============================================================
         // HR / INTERNAL STAFF LOGIN (OAuth2)
         // ============================================================
 
         /// <summary>
-        /// CỔNG ĐĂNG NHẬP 2: ĐIỀU HƯỚNG CHALLENGE OAUTH2
+        /// CỔNG �?ĂNG NHẬP 2: �?IỀU HƯỚNG CHALLENGE OAUTH2
         /// </summary>
         [HttpGet("external/signin")]
         [AllowAnonymous]
@@ -161,7 +208,7 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// CỔNG ĐĂNG NHẬP 2 (CALLBACK): TIẾP NHẬN DỮ LIỆU ĐĂNG NHẬP OAUTH2 VÀ XỬ LÝ JIT PROVISIONING
+        /// CỔNG �?ĂNG NHẬP 2 (CALLBACK): TIẾP NHẬN DỮ LIỆU �?ĂNG NHẬP OAUTH2 VÀ XỬ L�? JIT PROVISIONING
         /// </summary>
         [HttpGet("external/callback")]
         [AllowAnonymous]
@@ -240,7 +287,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// REFRESH TOKEN CHO HR USER (Internal Staff)
-        /// FE apiClient.ts:33 gọi endpoint này khi access token hết hạn (401)
+        /// FE apiClient.ts:33 g�?i endpoint này khi access token hết hạn (401)
         /// </summary>
         [HttpPost("refresh")]
         [AllowAnonymous]
@@ -328,7 +375,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// LẤY THÔNG TIN NGƯỜI DÙNG HIỆN TẠI TỪ JWT TOKEN
-        /// FE authService.ts:207 gọi endpoint này
+        /// FE authService.ts:207 g�?i endpoint này
         /// </summary>
         [HttpGet("me")]
         [Authorize]
@@ -376,8 +423,8 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// ĐĂNG XUẤT – REVOKE REFRESH TOKEN HIỆN TẠI
-        /// FE authService.ts:183 gọi endpoint này
+        /// �?ĂNG XUẤT – REVOKE REFRESH TOKEN HIỆN TẠI
+        /// FE authService.ts:183 g�?i endpoint này
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
@@ -414,7 +461,7 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// ĐĂNG KÝ TỰ DO DÀNH CHO ỨNG VIÊN (Candidate)
+        /// �?ĂNG K�? TỰ DO DÀNH CHO ỨNG VIÊN (Candidate)
         /// </summary>
         [HttpPost("candidate/register")]
         [AllowAnonymous]
@@ -446,7 +493,7 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// CỔNG ĐĂNG NHẬP 3: XÁC THỰC PASSWORDLESS CHO CANDIDATE PORTAL QUA MAGIC LINK
+        /// CỔNG �?ĂNG NHẬP 3: X�?C THỰC PASSWORDLESS CHO CANDIDATE PORTAL QUA MAGIC LINK
         /// </summary>
         [HttpGet("magic-link/verify")]
         [AllowAnonymous]
@@ -499,7 +546,7 @@ namespace ARISP.API.Controllers
                 Id = Guid.NewGuid(),
                 Email = candidate.Email,
                 TokenHash = resetToken,
-                ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), // Link có giá trị trong 2 giờ
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), // Link có giá trị trong 2 gi�?
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
@@ -529,7 +576,7 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// API ĐẶT LẠI MẬT KHẨU: Xác thực token hợp lệ từ bảng MagicLinks và cập nhật mật khẩu mới
+        /// API �?ẶT LẠI MẬT KHẨU: Xác thực token hợp lệ từ bảng MagicLinks và cập nhật mật khẩu mới
         /// </summary>
         [HttpPost("candidate/reset-password")]
         [AllowAnonymous]
@@ -550,7 +597,7 @@ namespace ARISP.API.Controllers
                 return BadRequest(new { message = "Invalid email or recovery token." });
             }
 
-            // 🛠️ ĐÃ SỬA ĐỔI CHUẨN: Tìm token hợp lệ trong bảng MagicLinks
+            // 🛠�? �?Ã SỬA �?ỔI CHUẨN: Tìm token hợp lệ trong bảng MagicLinks
             var magicLink = await _dbContext.MagicLinks
                 .FirstOrDefaultAsync(m => m.Email == request.Email
                                        && m.TokenHash == request.Token
@@ -566,7 +613,7 @@ namespace ARISP.API.Controllers
             candidate.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             candidate.UpdatedAt = DateTimeOffset.UtcNow;
 
-            // 3. Đánh dấu token đã được sử dụng để tránh dùng lại (Tăng cường bảo mật)
+            // 3. �?ánh dấu token đã được sử dụng để tránh dùng lại (Tăng cư�?ng bảo mật)
             magicLink.UsedAt = DateTimeOffset.UtcNow;
 
             await _dbContext.SaveChangesAsync();
@@ -624,7 +671,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// Sinh refresh token mới cho HR User, hash SHA256 rồi lưu vào bảng RefreshTokens.
-        /// Trả về token gốc (chưa hash) để gửi cho client.
+        /// Trả v�? token gốc (chưa hash) để gửi cho client.
         /// </summary>
         private async Task<string> GenerateAndStoreRefreshTokenForUserAsync(Guid userId)
         {
@@ -648,7 +695,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// Sinh refresh token mới cho Candidate, hash SHA256 rồi lưu vào bảng CandidateRefreshTokens.
-        /// Trả về token gốc (chưa hash) để gửi cho client.
+        /// Trả v�? token gốc (chưa hash) để gửi cho client.
         /// </summary>
         private async Task<string> GenerateAndStoreRefreshTokenForCandidateAsync(Guid candidateAccountId)
         {
