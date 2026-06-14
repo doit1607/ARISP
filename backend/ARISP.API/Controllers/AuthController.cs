@@ -43,8 +43,8 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// CỔNG �?ĂNG NHẬP 1: DÀNH RIÊNG CHO ỨNG VIÊN (Candidate - Tại /jobs/login)
-        /// Xác thực truy�?n thống qua form đi�?n Email + Mật khẩu cá nhân
+        /// CỔNG ĐĂNG NHẬP 1: DÀNH RIÊNG CHO ỨNG VIÊN (Candidate - Tại /jobs/login)
+        /// Xác thực truyền thống qua form điền Email + Mật khẩu cá nhân
         /// </summary>
         [HttpPost("candidate/login")]
         [AllowAnonymous]
@@ -61,7 +61,7 @@ namespace ARISP.API.Controllers
             if (!isValidCandidatePass)
                 return Unauthorized(new { message = "Invalid email or password." });
 
-            // Cập nhật th�?i gian đăng nhập cuối
+            // Cập nhật thời gian đăng nhập cuối
             candidate.LastLoginAt = DateTimeOffset.UtcNow;
 
             var accessToken = GenerateJwtTokenForCandidate(candidate);
@@ -76,76 +76,13 @@ namespace ARISP.API.Controllers
             });
         }
 
-        /// <summary>
-        /// CỔNG �?ĂNG NHẬP FIREBASE: Backend xác thực Firebase ID token rồi cấp JWT nội bộ ARISP.
-        /// </summary>
-        [HttpPost("firebase/candidate/login")]
-        [Authorize(AuthenticationSchemes = "Firebase")]
-        public async Task<IActionResult> FirebaseCandidateLogin()
-        {
-            var firebaseUid = User.FindFirst("user_id")?.Value
-                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                ?? User.FindFirst("sub")?.Value;
-            var email = User.FindFirst(ClaimTypes.Email)?.Value
-                ?? User.FindFirst("email")?.Value;
-            var name = User.FindFirst(ClaimTypes.Name)?.Value
-                ?? User.FindFirst("name")?.Value
-                ?? email;
-
-            if (string.IsNullOrWhiteSpace(firebaseUid) || string.IsNullOrWhiteSpace(email))
-            {
-                return Unauthorized(new { message = "Firebase token does not contain required user identity claims." });
-            }
-
-            var candidateEmail = email;
-            var candidateName = string.IsNullOrWhiteSpace(name) ? candidateEmail : name;
-
-            var candidate = await _dbContext.CandidateAccounts
-                .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(c => c.Email == candidateEmail);
-
-            if (candidate == null)
-            {
-                candidate = new CandidateAccount
-                {
-                    Id = Guid.NewGuid(),
-                    Email = candidateEmail,
-                    PasswordHash = "FIREBASE_AUTH",
-                    FullName = candidateName,
-                    EmailVerified = true
-                };
-
-                await _dbContext.CandidateAccounts.AddAsync(candidate);
-                await _dbContext.SaveChangesAsync();
-            }
-            else if (!candidate.EmailVerified)
-            {
-                candidate.EmailVerified = true;
-                await _dbContext.SaveChangesAsync();
-            }
-
-            candidate.LastLoginAt = DateTimeOffset.UtcNow;
-
-            var accessToken = GenerateJwtTokenForCandidate(candidate);
-            var refreshToken = await GenerateAndStoreRefreshTokenForCandidateAsync(candidate.Id);
-
-            return Ok(new FirebaseAuthResponse
-            {
-                AccessToken = accessToken,
-                RefreshToken = refreshToken,
-                FullName = candidate.FullName ?? "Candidate",
-                Role = AppRoles.Candidate,
-                FirebaseUid = firebaseUid
-            });
-        }
-
         // ============================================================
         // HR / INTERNAL STAFF LOGIN (Email + Password)
         // ============================================================
 
         /// <summary>
-        /// CỔNG �?ĂNG NHẬP NỘI BỘ: Dành cho Super Admin, HR Admin, Recruiter
-        /// Xác thực truy�?n thống qua form đi�?n Email + Mật khẩu (tài khoản được Super Admin cấp phát trước)
+        /// CỔNG ĐĂNG NHẬP NỘI BỘ: Dành cho Super Admin, HR Admin, Recruiter
+        /// Xác thực truyền thống qua form điền Email + Mật khẩu (tài khoản được Super Admin cấp phát trước)
         /// </summary>
         [HttpPost("staff/login")]
         [AllowAnonymous]
@@ -164,8 +101,8 @@ namespace ARISP.API.Controllers
             if (!user.IsActive)
                 return Unauthorized(new { message = "Tài khoản đã bị vô hiệu hóa. Vui lòng liên hệ quản trị viên." });
 
-            if (string.IsNullOrEmpty(user.PasswordHash) || user.PasswordHash == "FIREBASE_AUTH")
-                return BadRequest(new { message = "Tài khoản này chỉ hỗ trợ đăng nhập qua SSO (Google/Microsoft)." });
+            if (string.IsNullOrEmpty(user.PasswordHash))
+                return BadRequest(new { message = "Tài khoản này chỉ hỗ trợ đăng nhập qua SSO." });
 
             bool isValidPass = BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash);
             if (!isValidPass)
@@ -191,7 +128,7 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// CỔNG �?ĂNG NHẬP 2: �?IỀU HƯỚNG CHALLENGE OAUTH2
+        /// CỔNG ĐĂNG NHẬP 2: ĐIỀU HƯỚNG CHALLENGE OAUTH2
         /// </summary>
         [HttpGet("external/signin")]
         [AllowAnonymous]
@@ -208,7 +145,7 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// CỔNG �?ĂNG NHẬP 2 (CALLBACK): TIẾP NHẬN DỮ LIỆU �?ĂNG NHẬP OAUTH2 VÀ XỬ L�? JIT PROVISIONING
+        /// CỔNG ĐĂNG NHẬP 2 (CALLBACK): TIẾP NHẬN DỮ LIỆU ĐĂNG NHẬP OAUTH2 VÀ XỬ LÝ JIT PROVISIONING
         /// </summary>
         [HttpGet("external/callback")]
         [AllowAnonymous]
@@ -274,7 +211,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// REFRESH TOKEN CHO HR USER (Internal Staff)
-        /// FE apiClient.ts:33 g�?i endpoint này khi access token hết hạn (401)
+        /// FE apiClient.ts:33 gọi endpoint này khi access token hết hạn (401)
         /// </summary>
         [HttpPost("refresh")]
         [AllowAnonymous]
@@ -362,7 +299,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// LẤY THÔNG TIN NGƯỜI DÙNG HIỆN TẠI TỪ JWT TOKEN
-        /// FE authService.ts:207 g�?i endpoint này
+        /// FE authService.ts:207 gọi endpoint này
         /// </summary>
         [HttpGet("me")]
         [Authorize]
@@ -410,8 +347,8 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// �?ĂNG XUẤT – REVOKE REFRESH TOKEN HIỆN TẠI
-        /// FE authService.ts:183 g�?i endpoint này
+        /// ĐĂNG XUẤT – REVOKE REFRESH TOKEN HIỆN TẠI
+        /// FE authService.ts:183 gọi endpoint này
         /// </summary>
         [HttpPost("logout")]
         [Authorize]
@@ -448,7 +385,7 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// �?ĂNG K�? TỰ DO DÀNH CHO ỨNG VIÊN (Candidate)
+        /// ĐĂNG KÝ TỰ DO DÀNH CHO ỨNG VIÊN (Candidate)
         /// </summary>
         [HttpPost("candidate/register")]
         [AllowAnonymous]
@@ -485,7 +422,7 @@ namespace ARISP.API.Controllers
         // ============================================================
 
         /// <summary>
-        /// CỔNG �?ĂNG NHẬP 3: X�?C THỰC PASSWORDLESS CHO CANDIDATE PORTAL QUA MAGIC LINK
+        /// CỔNG ĐĂNG NHẬP 3: XÁC THỰC PASSWORDLESS CHO CANDIDATE PORTAL QUA MAGIC LINK
         /// </summary>
         [HttpGet("magic-link/verify")]
         [AllowAnonymous]
@@ -538,7 +475,7 @@ namespace ARISP.API.Controllers
                 Id = Guid.NewGuid(),
                 Email = candidate.Email,
                 TokenHash = resetToken,
-                ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), // Link có giá trị trong 2 gi�?
+                ExpiresAt = DateTimeOffset.UtcNow.AddHours(2), // Link có giá trị trong 2 giờ
                 CreatedAt = DateTimeOffset.UtcNow
             };
 
@@ -568,7 +505,7 @@ namespace ARISP.API.Controllers
         }
 
         /// <summary>
-        /// API �?ẶT LẠI MẬT KHẨU: Xác thực token hợp lệ từ bảng MagicLinks và cập nhật mật khẩu mới
+        /// API ĐẶT LẠI MẬT KHẨU: Xác thực token hợp lệ từ bảng MagicLinks và cập nhật mật khẩu mới
         /// </summary>
         [HttpPost("candidate/reset-password")]
         [AllowAnonymous]
@@ -589,7 +526,7 @@ namespace ARISP.API.Controllers
                 return BadRequest(new { message = "Invalid email or recovery token." });
             }
 
-            // 🛠�? �?Ã SỬA �?ỔI CHUẨN: Tìm token hợp lệ trong bảng MagicLinks
+            // 🛠️ ĐÃ SỬA ĐỔI CHUẨN: Tìm token hợp lệ trong bảng MagicLinks
             var magicLink = await _dbContext.MagicLinks
                 .FirstOrDefaultAsync(m => m.Email == request.Email
                                        && m.TokenHash == request.Token
@@ -610,7 +547,7 @@ namespace ARISP.API.Controllers
             candidate.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
             candidate.UpdatedAt = DateTimeOffset.UtcNow;
 
-            // 3. �?ánh dấu token đã được sử dụng để tránh dùng lại (Tăng cư�?ng bảo mật)
+            // 3. Đánh dấu token đã được sử dụng để tránh dùng lại (Tăng cường bảo mật)
             magicLink.UsedAt = DateTimeOffset.UtcNow;
 
             await _dbContext.SaveChangesAsync();
@@ -700,7 +637,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// Sinh refresh token mới cho HR User, hash SHA256 rồi lưu vào bảng RefreshTokens.
-        /// Trả v�? token gốc (chưa hash) để gửi cho client.
+        /// Trả về token gốc (chưa hash) để gửi cho client.
         /// </summary>
         private async Task<string> GenerateAndStoreRefreshTokenForUserAsync(Guid userId)
         {
@@ -724,7 +661,7 @@ namespace ARISP.API.Controllers
 
         /// <summary>
         /// Sinh refresh token mới cho Candidate, hash SHA256 rồi lưu vào bảng CandidateRefreshTokens.
-        /// Trả v�? token gốc (chưa hash) để gửi cho client.
+        /// Trả về token gốc (chưa hash) để gửi cho client.
         /// </summary>
         private async Task<string> GenerateAndStoreRefreshTokenForCandidateAsync(Guid candidateAccountId)
         {
